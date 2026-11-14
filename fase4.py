@@ -599,3 +599,271 @@ class AplicacionSoftwareFJ:
             text="Software JV | Sistema de gestion sin base de datos",
             fg="gray"
         ).pack(pady=5)
+
+    # ------------------------------------------------------
+    # PESTAÑA CLIENTES
+    # ------------------------------------------------------
+
+    def crear_tab_clientes(self):
+        marco = ttk.LabelFrame(
+            self.tab_clientes,
+            text="Registro de clientes",
+            padding=15
+        )
+        marco.pack(fill="x", padx=15, pady=15)
+
+        campos = [
+            ("Nombre completo:", "nombre"),
+            ("Documento:", "documento"),
+            ("Correo electronico:", "correo"),
+            ("Telefono:", "telefono")
+        ]
+
+        self.campos_cliente = {}
+
+        for fila, (texto, clave) in enumerate(campos):
+            tk.Label(marco, text=texto).grid(
+                row=fila, column=0, sticky="w", pady=7
+            )
+
+            entrada = tk.Entry(marco, width=35)
+            entrada.grid(row=fila, column=1, padx=10)
+            self.campos_cliente[clave] = entrada
+
+        tk.Button(
+            marco,
+            text="REGISTRAR CLIENTE",
+            command=self.registrar_cliente
+        ).grid(row=4, column=0, columnspan=2, pady=12)
+
+        lista = ttk.LabelFrame(
+            self.tab_clientes,
+            text="Clientes registrados",
+            padding=10
+        )
+        lista.pack(fill="both", expand=True, padx=15, pady=10)
+
+        self.lista_clientes = tk.Listbox(lista)
+        self.lista_clientes.pack(fill="both", expand=True)
+
+    def registrar_cliente(self):
+        try:
+            c = self.campos_cliente
+
+            cliente = self.sistema.registrar_cliente(
+                c["nombre"].get(),
+                c["documento"].get(),
+                c["correo"].get(),
+                c["telefono"].get()
+            )
+
+        except ErrorSistema as error:
+            messagebox.showerror("Error", str(error))
+
+        except Exception as error:
+            logging.exception(
+                "Error inesperado en registro de cliente."
+            )
+            messagebox.showerror(
+                "Error inesperado",
+                f"No se pudo registrar el cliente.\n{error}"
+            )
+
+        else:
+            messagebox.showinfo(
+                "Registro exitoso",
+                f"Cliente registrado.\nCodigo: {cliente.identificador}"
+            )
+
+            for entrada in self.campos_cliente.values():
+                entrada.delete(0, tk.END)
+
+            self.actualizar_clientes()
+            self.actualizar_combos()
+
+    def actualizar_clientes(self):
+        self.lista_clientes.delete(0, tk.END)
+
+        for cliente in self.sistema.clientes:
+            self.lista_clientes.insert(
+                tk.END,
+                f"{cliente.identificador} | "
+                f"{cliente.nombre} | {cliente.documento}"
+            )
+
+    # ------------------------------------------------------
+    # PESTAÑA SERVICIOS
+    # ------------------------------------------------------
+
+    def crear_tab_servicios(self):
+        marco = ttk.LabelFrame(
+            self.tab_servicios,
+            text="Crear servicio",
+            padding=15
+        )
+        marco.pack(fill="x", padx=15, pady=15)
+
+        tk.Label(marco, text="Tipo de servicio:").grid(
+            row=0, column=0, sticky="w", pady=7
+        )
+
+        self.tipo_servicio = ttk.Combobox(
+            marco,
+            values=["Sala", "Equipo", "Asesoria"],
+            state="readonly",
+            width=30
+        )
+        self.tipo_servicio.grid(row=0, column=1, padx=10)
+        self.tipo_servicio.current(0)
+
+        tk.Label(marco, text="Nombre del servicio:").grid(
+            row=1, column=0, sticky="w", pady=7
+        )
+
+        self.nombre_servicio = tk.Entry(marco, width=33)
+        self.nombre_servicio.grid(row=1, column=1, padx=10)
+
+        tk.Label(marco, text="Tarifa por hora:").grid(
+            row=2, column=0, sticky="w", pady=7
+        )
+
+        self.tarifa_servicio = tk.Entry(marco, width=33)
+        self.tarifa_servicio.grid(row=2, column=1, padx=10)
+
+        tk.Label(
+            marco,
+            text="Capacidad / Cantidad / Especialidad:"
+        ).grid(row=3, column=0, sticky="w", pady=7)
+
+        self.parametro_servicio = tk.Entry(marco, width=33)
+        self.parametro_servicio.grid(row=3, column=1, padx=10)
+
+        tk.Label(
+            marco,
+            text=(
+                "Para sala: capacidad en personas.\n"
+                "Para equipo: cantidad de unidades.\n"
+                "Para asesoria: nombre de la especialidad."
+            ),
+            fg="gray",
+            justify="left"
+        ).grid(row=4, column=0, columnspan=2, sticky="w", pady=5)
+
+        tk.Button(
+            marco,
+            text="CREAR SERVICIO",
+            command=self.crear_servicio
+        ).grid(row=5, column=0, columnspan=2, pady=12)
+
+        lista = ttk.LabelFrame(
+            self.tab_servicios,
+            text="Servicios registrados",
+            padding=10
+        )
+        lista.pack(fill="both", expand=True, padx=15, pady=10)
+
+        self.lista_servicios = tk.Listbox(lista)
+        self.lista_servicios.pack(fill="both", expand=True)
+
+    def convertir_tarifa(self, texto):
+        """
+        Acepta:
+        50000
+        50000.0
+        50.000 (se interpreta como cincuenta mil)
+        50000,50
+        """
+        texto = texto.strip().replace("$", "").replace(" ", "")
+
+        if not texto:
+            raise ValueError("La tarifa esta vacia.")
+
+        if "." in texto and "," in texto:
+            # Ejemplo: 50.000,50
+            texto = texto.replace(".", "").replace(",", ".")
+
+        elif "," in texto:
+            # Ejemplo: 50000,50
+            texto = texto.replace(",", ".")
+
+        elif "." in texto:
+            partes = texto.split(".")
+            if len(partes) > 1 and all(
+                len(parte) == 3 for parte in partes[1:]
+            ):
+                # Ejemplo: 50.000
+                texto = "".join(partes)
+
+        return float(texto)
+
+    def crear_servicio(self):
+        try:
+            tipo = self.tipo_servicio.get().strip()
+            nombre = self.nombre_servicio.get().strip()
+            tarifa_texto = self.tarifa_servicio.get().strip()
+            parametro = self.parametro_servicio.get().strip()
+
+            if not tipo or not nombre or not tarifa_texto or not parametro:
+                raise DatosInvalidosError(
+                    "Complete todos los campos del servicio."
+                )
+
+            tarifa = self.convertir_tarifa(tarifa_texto)
+
+            servicio = self.sistema.crear_servicio(
+                tipo, nombre, tarifa, parametro
+            )
+
+        except ErrorSistema as error:
+            logging.exception("Error al registrar servicio.")
+            messagebox.showerror(
+                "Error al crear servicio", str(error)
+            )
+            return
+
+        except (ValueError, TypeError) as error:
+            logging.exception(
+                "Error de conversion en los datos del servicio."
+            )
+            messagebox.showerror(
+                "Datos incorrectos",
+                f"Revise la tarifa y el parametro ingresado.\n\n"
+                f"Detalle: {error}"
+            )
+            return
+
+        except Exception as error:
+            logging.exception(
+                "Error inesperado al crear servicio."
+            )
+            messagebox.showerror(
+                "Error inesperado",
+                f"No fue posible crear el servicio.\n\nDetalle: {error}"
+            )
+            return
+
+        else:
+            messagebox.showinfo(
+                "Servicio creado",
+                f"Servicio creado correctamente.\n"
+                f"Codigo: {servicio.identificador}\n"
+                f"Nombre: {servicio.nombre}"
+            )
+
+            self.nombre_servicio.delete(0, tk.END)
+            self.tarifa_servicio.delete(0, tk.END)
+            self.parametro_servicio.delete(0, tk.END)
+
+            self.actualizar_servicios()
+            self.actualizar_combos()
+
+    def actualizar_servicios(self):
+        self.lista_servicios.delete(0, tk.END)
+
+        for servicio in self.sistema.servicios:
+            self.lista_servicios.insert(
+                tk.END,
+                f"{servicio.identificador} | "
+                f"{servicio.nombre} | "
+                f"${servicio.tarifa:,.0f} por hora"
+            )
